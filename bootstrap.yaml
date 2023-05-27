@@ -41,6 +41,16 @@
           - evtest
           - xauth
 
+    - name: Update LXC images available
+      shell: pveam update
+
+    - name: Disable rpcbind
+      loop: [target, socket, service]
+      systemd:
+        name: rpcbind.{{ item }}
+        state: stopped
+        enabled: no
+
     - name: Read grub boot options
       shell: "grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | cut -d'=' -f2- | tr -d '\"'"
       register: cmd_grub_cmdline
@@ -132,6 +142,13 @@
       sysctl:
         name: vm.swappiness
         value: "0"
+        state: present
+        sysctl_set: true
+
+    - name: Enable IP forward (routing)
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: "1"
         state: present
         sysctl_set: true
 
@@ -239,3 +256,39 @@
       register: command
       failed_when: command.rc != 0 and (command.rc != 2 and "already exists" not in command.stderr)
       changed_when: '"already exists" not in command.stderr'
+
+- name: Setup fail2ban rules for Proxmox
+  hosts: proxmox
+  become: yes
+  gather_facts: false
+  tasks:
+    - name: Check if fail2ban package is installed
+      register: fail2ban
+      shell: dpkg -s fail2ban
+      changed_when: false
+      failed_when: fail2ban.rc != 0 and fail2ban.rc != 1
+      ignore_errors: true
+
+    - when: fail2ban.rc == 0
+      block:
+      - name: Create filter file
+        copy:
+          dest: /etc/fail2ban/filter.d/proxmox.conf
+          content: |
+            [Definition]
+            failregex = pvedaemon\[.*authentication failure; rhost=<HOST> user=.* msg=.*
+            ignoreregex =
+
+      - name: Create jail file
+        copy:
+          dest: /etc/fail2ban/jail.d/proxmox.conf
+          content: |
+            [proxmox]
+            enabled = true
+            port = https,http,8006,8007
+            filter = proxmox
+            logpath = /var/log/daemon.log
+            maxretry = 4
+            # 1 hour
+            bantime = 3600
+            findtime = 600
