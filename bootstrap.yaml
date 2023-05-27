@@ -81,3 +81,55 @@
         autoremove: yes
     - name: Update GRUB
       command: update-grub
+
+- name: Setup SSH
+  hosts: proxmox
+  become: yes
+  vars_files:
+    - variables.yaml
+  vars:
+    authorized_keys: "{{ ansible_user_dir }}/.ssh/authorized_keys"
+  tasks:
+    - when: github_user is defined and github_user != ""
+      block:
+      - name: Check if authorized_keys file exists
+        register: authorized_keys_check
+        stat:
+          path: "{{ authorized_keys }}"
+
+      - name: Create .ssh directory
+        file:
+          path: "{{ ansible_user_dir }}/.ssh"
+          state: directory
+          mode: "0700"
+        when: not authorized_keys_check.stat.exists
+
+      - name: Create authorized_keys
+        file:
+          path: "{{ authorized_keys }}"
+          state: touch
+          mode: "0600"
+        when: not authorized_keys_check.stat.exists
+
+      - name: Check if keys have been setup previously
+        shell: |
+          grep -q "# -- GITHUB KEYS {{ github_user }}" "{{ authorized_keys }}"
+          echo $?
+        register: auth_keys_check
+        changed_when: false
+        check_mode: no
+
+      - name: Download SSH keys from GitHub
+        uri:
+          url: "https://github.com/{{ github_user }}.keys"
+          return_content: yes
+        register: github_keys
+        when: auth_keys_check.stdout != "0"
+
+      - name: Append SSH keys to authorized_keys file
+        shell: |-
+          cat << EOF >> "{{ authorized_keys }}"
+          # -- GITHUB KEYS {{ github_user }}
+          {{ github_keys.content }}
+          EOF
+        when: auth_keys_check.stdout != "0"
