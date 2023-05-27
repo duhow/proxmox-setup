@@ -5,3 +5,5 @@ github_user: *user
 proxmox_user: *user
 # pve, pam
 proxmox_realm: pam
+
+timezone: Europe/Madrid

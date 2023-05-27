@@ -1,6 +1,8 @@
 - name: Bootstrap Proxmox Node
   hosts: proxmox
   become: yes
+  vars_files:
+    - variables.yaml
   tasks:
     - name: Disable enterprise source repository
       file:
@@ -29,6 +31,7 @@
           - vim
           - tmux
           - curl
+          - git
           - unzip
           - pigz
           - lm-sensors
@@ -99,6 +102,43 @@
         enabled: no
       when: "'is not installed' not in udisks2_check.stdout"
 
+    - name: Disable IPv6
+      copy:
+        dest: /etc/sysctl.d/90-disable-ipv6.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          net.ipv6.conf.all.disable_ipv6=1
+          net.ipv6.conf.lo.disable_ipv6=1
+          net.ipv6.conf.default.disable_ipv6=1
+
+      # CVE-2019-11477
+    - name: Disable TCP SACK
+      sysctl:
+        name: net.ipv4.tcp_sack
+        value: "0"
+        state: present
+        sysctl_set: true
+
+    - name: Disable TCP MTU Probing
+      sysctl:
+        name: net.ipv4.tcp_mtu_probing
+        value: "0"
+        state: present
+        sysctl_set: true
+
+    - name: Disable Swappiness
+      sysctl:
+        name: vm.swappiness
+        value: "0"
+        state: present
+        sysctl_set: true
+
+    - name: Set default timezone
+      timezone:
+        name: "{{ timezone }}"
+
   handlers:
     - name: Update package list
       apt:
@@ -166,6 +206,7 @@
 - name: Create Proxmox ACL groups
   hosts: proxmox
   become: yes
+  gather_facts: false
   vars_files:
     - variables.yaml
   vars:
