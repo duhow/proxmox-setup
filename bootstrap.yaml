@@ -137,6 +137,15 @@
           vfio_pci
           vfio_virqfd
 
+      # https://forum.proxmox.com/threads/kubernetes-sharing-of-dev-kmsg-with-the-container.61622/
+    - name: Enable modules for nested LXC containers
+      copy:
+        dest: /etc/modules-load.d/lxc-overlay.conf
+        mode: "0644"
+        content: |
+          overlay
+          br_netfilter
+
     - name: Check if udisks2 package is installed
       shell: dpkg -s udisks2
       register: udisks2_check
