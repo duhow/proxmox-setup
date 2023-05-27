@@ -51,6 +51,16 @@
         state: stopped
         enabled: no
 
+    - name: Change GRUB timeout
+      with_items: [2]
+      lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_TIMEOUT='
+        line: GRUB_TIMEOUT={{ item }}
+        backup: yes
+      notify:
+        - Update GRUB
+
     - name: Read grub boot options
       shell: "grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | cut -d'=' -f2- | tr -d '\"'"
       register: cmd_grub_cmdline
@@ -84,12 +94,12 @@
 
     - name: Update GRUB file
       when: "grub_cmdline != cmd_grub_cmdline.stdout"
+      with_items: ["{{ grub_cmdline }}"]
       lineinfile:
         dest: /etc/default/grub
         regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
-        line: 'GRUB_CMDLINE_LINUX_DEFAULT="{{ grub_cmdline }}"'
+        line: 'GRUB_CMDLINE_LINUX_DEFAULT="{{ item }}"'
         backup: yes
-        insertafter: '^GRUB_CMDLINE_LINUX_DEFAULT='
       notify:
         - Update GRUB
 
@@ -182,8 +192,9 @@
           sysctl_set: true
 
     - name: Set default timezone
+      with_items: ["{{ timezone }}"]
       timezone:
-        name: "{{ timezone }}"
+        name: "{{ item }}"
 
   handlers:
     - name: Update package list
