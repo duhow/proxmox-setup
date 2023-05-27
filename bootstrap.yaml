@@ -1,0 +1,83 @@
+- name: Bootstrap Proxmox Node
+  hosts: proxmox
+  become: yes
+  tasks:
+    - name: Disable enterprise source repository
+      file:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+        state: absent
+
+    - name: Enable no-subscription repository
+      lineinfile:
+        dest: /etc/apt/sources.list.d/pve-no-subscription.list
+        line: "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
+        create: yes
+      notify:
+        - Update package list
+
+    - name: Update package list
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      notify:
+        - Upgrade packages
+
+    - name: Install required packages
+      apt:
+        state: present
+        name:
+          - vim
+          - tmux
+          - curl
+          - unzip
+          - lm-sensors
+          - fwupd
+
+    - name: Read grub boot options
+      shell: "grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | cut -d'=' -f2- | tr -d '\"'"
+      register: cmd_grub_cmdline
+      changed_when: false
+
+    - name: Set grub fact
+      set_fact:
+        grub_cmdline: "{{ cmd_grub_cmdline.stdout }}"
+
+    - name: Enable Intel IOMMU
+      set_fact:
+        grub_cmdline: "{{ grub_cmdline }} intel_iommu=on"
+      when: "'intel_iommu' not in grub_cmdline"
+
+    - name: Enable Intel GPU Virtualization
+      set_fact:
+        grub_cmdline: "{{ grub_cmdline }} i915.enable_gvt=1"
+      when: "'i915.enable_gvt' not in grub_cmdline"
+
+      # WARNING: This disables Spectre CPU patches, but increases CPU speed.
+      # USE WITH CAUTION!
+    - name: Disable CPU bug mitigations
+      set_fact:
+        grub_cmdline: "{{ grub_cmdline }} mitigations=off"
+      when: "'mitigations' not in grub_cmdline"
+
+    - name: Update GRUB file
+      when: "grub_cmdline != cmd_grub_cmdline.stdout"
+      lineinfile:
+        dest: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+        line: 'GRUB_CMDLINE_LINUX_DEFAULT="{{ grub_cmdline }}"'
+        backup: yes
+        insertafter: '^GRUB_CMDLINE_LINUX_DEFAULT='
+      notify:
+        - Update GRUB
+
+  handlers:
+    - name: Update package list
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+    - name: Upgrade packages
+      apt:
+        upgrade: safe
+        autoremove: yes
+    - name: Update GRUB
+      command: update-grub
