@@ -152,6 +152,22 @@
         state: present
         sysctl_set: true
 
+    - block:
+      - name: Enable TCP Classless Queuing Disciplines (BBR)
+        sysctl:
+          name: net.core.default_qdisc
+          value: fq
+          state: present
+          sysctl_set: true
+
+      - name: Enable TCP Bottleneck Bandwidth and RRT (BBR)
+        sysctl:
+          name: net.ipv4.tcp_congestion_control
+          # original: cubic reno
+          value: bbr
+          state: present
+          sysctl_set: true
+
     - name: Set default timezone
       timezone:
         name: "{{ timezone }}"
