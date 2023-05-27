@@ -30,8 +30,13 @@
           - tmux
           - curl
           - unzip
+          - pigz
           - lm-sensors
           - fwupd
+          - testdisk
+          - ethtool
+          - evtest
+          - xauth
 
     - name: Read grub boot options
       shell: "grep -E '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | cut -d'=' -f2- | tr -d '\"'"
@@ -69,6 +74,30 @@
         insertafter: '^GRUB_CMDLINE_LINUX_DEFAULT='
       notify:
         - Update GRUB
+
+    - name: Enable IOMMU VFIO Virtual Function I/O
+      copy:
+        dest: /etc/modules-load.d/vfio.conf
+        mode: "0644"
+        content: |
+          vfio
+          vfio_iommu_type1
+          vfio_pci
+          vfio_virqfd
+
+    - name: Check if udisks2 package is installed
+      shell: dpkg -s udisks2
+      register: udisks2_check
+      changed_when: false
+      check_mode: no
+
+      # NOTE: Host CPU gets overloaded due to this component.
+    - name: Disable udisks2 systemd service if installed
+      systemd:
+        name: udisks2.service
+        state: stopped
+        enabled: no
+      when: "'is not installed' not in udisks2_check.stdout"
 
   handlers:
     - name: Update package list
@@ -133,3 +162,39 @@
           {{ github_keys.content }}
           EOF
         when: auth_keys_check.stdout != "0"
+
+- name: Create Proxmox ACL groups
+  hosts: proxmox
+  become: yes
+  vars_files:
+    - variables.yaml
+  vars:
+    group_name: root
+    role_name: Administrator
+  tasks:
+    - name: Get Proxmox user management groups
+      shell: pveum group list
+      register: proxmox_groups
+      changed_when: false
+
+    - when: proxmox_user is defined and proxmox_user != "" and group_name not in proxmox_groups.stdout
+      block:
+      - name: Create Proxmox group {{ group_name }}
+        shell: pveum group add {{ group_name }}
+        register: command
+        failed_when: command.rc != 0 and command.rc != 255
+        changed_when: true
+        ignore_errors: true
+
+      - name: Add {{ role_name }} role to Proxmox group {{ group_name }}
+        shell: pveum acl modify '/' -group {{ group_name }} -role {{ role_name }}
+        register: command
+        changed_when: true
+        ignore_errors: true
+
+    - name: Create user {{ proxmox_user }}
+      when: proxmox_user is defined and proxmox_user != ""
+      shell: pveum user add {{ proxmox_user }}@{{ proxmox_realm }}
+      register: command
+      failed_when: command.rc != 0 and (command.rc != 2 and "already exists" not in command.stderr)
+      changed_when: '"already exists" not in command.stderr'

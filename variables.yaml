@@ -1,1 +1,7 @@
-github_user: duhow
+user: &user duhow
+
+github_user: *user
+
+proxmox_user: *user
+# pve, pam
+proxmox_realm: pam
