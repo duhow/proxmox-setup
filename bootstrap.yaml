@@ -51,6 +51,29 @@
         state: stopped
         enabled: no
 
+    - block:
+      - name: Check file
+        stat:
+          path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+        register: file_stats_pre
+
+      - name: Disabling the subscription banner
+        with_items: ["/usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js"]
+        shell: |
+          sed -i "s/data.status !== 'Active'/false/g" {{ item }}
+          sed -i "s/checked_command: function(orig_cmd) {/checked_command: function() {} || function(orig_cmd) {/g" {{ item }}
+
+      - name: Check file post-modification
+        stat:
+          path: /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
+        register: file_stats_post
+
+      - name: Restart Proxmox VE Proxy
+        when: file_stats_pre.stat.mtime != file_stats_post.stat.mtime
+        systemd:
+          name: pveproxy
+          state: restarted
+
     - name: Change GRUB timeout
       with_items: [2]
       lineinfile:
