@@ -65,6 +65,11 @@
         grub_cmdline: "{{ grub_cmdline }} intel_iommu=on"
       when: "'intel_iommu' not in grub_cmdline"
 
+    - name: Enable General IOMMU
+      set_fact:
+        grub_cmdline: "{{ grub_cmdline }} iommu=pt"
+      when: "' iommu=' not in grub_cmdline"
+
     - name: Enable Intel GPU Virtualization
       set_fact:
         grub_cmdline: "{{ grub_cmdline }} i915.enable_gvt=1"
@@ -165,6 +170,14 @@
           name: net.ipv4.tcp_congestion_control
           # original: cubic reno
           value: bbr
+          state: present
+          sysctl_set: true
+
+      - name: Enable TCP Fast Open
+        sysctl:
+          name: net.ipv4.tcp_fastopen
+          # client and server
+          value: "3"
           state: present
           sysctl_set: true
 
