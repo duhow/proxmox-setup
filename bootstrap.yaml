@@ -292,7 +292,7 @@
 
     - name: Create user {{ proxmox_user }}
       when: proxmox_user is defined and proxmox_user != ""
-      shell: pveum user add {{ proxmox_user }}@{{ proxmox_realm }}
+      shell: pveum user add {{ proxmox_user }}@{{ proxmox_realm }} -group {{ group_name }}
       register: command
       failed_when: command.rc != 0 and (command.rc != 2 and "already exists" not in command.stderr)
       changed_when: '"already exists" not in command.stderr'
